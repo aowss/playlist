@@ -1,0 +1,12 @@
+#EXTM3U
+# comment 1
+#EXT-X-TARGETDURATION:10
+#EX comment 2
+#EXT-X-VERSION:3
+#EXTINF:9.009,
+http://media.example.com/façade.ts
+#EXTINF:9.009,
+http://media.example.com/second.ts
+#EXTINF:3.003,
+http://media.example.com/third.ts
+#EXT-X-ENDLIST

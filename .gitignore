@@ -1,0 +1,5 @@
+target/*
+!target/playlist.jar
+*.idea
+*.iml
+.asciidoctor/*
