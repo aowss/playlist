@@ -1,36 +1,32 @@
 package com.aowss.m3u;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.*;
 import java.text.Normalizer;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.BiPredicate;
-import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.function.*;
 import java.util.stream.Stream;
 
 import static java.util.function.Predicate.not;
 
 public class PlaylistReader {
 
-    public static Stream<String> streamFile(Path filePath) {
+    public static Stream<Line> streamFile(Path filePath) {
 
         try {
 
-            var lineNumber = new AtomicLong();
+            var lineNumber = new AtomicLong(1);
 
-            Stream<String> result = Files.lines(filePath, StandardCharsets.UTF_8)
-                    .map(incrementLineNumber.apply(lineNumber))
-                    .map(startsWithBOMCheck.apply(lineNumber))
-                    .map(validLineCheck.apply(lineNumber))
+            Stream<Line> result = Files.lines(filePath, StandardCharsets.UTF_8)
+                    .map(addLineNumber.apply(lineNumber))
+                    .map(startsWithBOMCheck)
+                    .map(validLineCheck)
                     .filter(not(emptyLine))
                     .filter(not(commentLine))
-                    .map(validCharactersCheck.apply(lineNumber))
-                    .map(normalizationCheck.apply(lineNumber));
+                    .map(validCharactersCheck)
+                    .map(normalizationCheck);
 
             return result;
 
@@ -40,36 +36,33 @@ public class PlaylistReader {
 
     }
 
-    private static Function<AtomicLong, Function<String, String>> incrementLineNumber = lineNumber -> line -> {
-        lineNumber.getAndIncrement();
-        return line;
-    };
+    private static Function<AtomicLong, Function<String, Line>> addLineNumber = lineNumber -> line -> new Line(lineNumber.getAndIncrement(), line);
 
-    private static Predicate<String> uri = line -> {
+    private static Predicate<Line> uri = line -> {
         try {
-            new URI(line);
+            new URI(line.content());
             return true;
         } catch (URISyntaxException use) {
             return false;
         }
     };
-    private static Predicate<String> startsWithHash = line -> line.charAt(0) == '#';
-    private static Predicate<String> emptyLine = line -> line.isBlank();
-    public static Predicate<String> validLine = emptyLine.or(startsWithHash).or(uri);
+    private static Predicate<Line> startsWithHash = line -> line.content().charAt(0) == '#';
+    private static Predicate<Line> emptyLine = line -> line.content().isBlank();
+    public static Predicate<Line> validLine = emptyLine.or(startsWithHash).or(uri);
 
-    static Function<AtomicLong, Function<String, String>> validLineCheck = lineNumber -> line -> {
-        if (!validLine.test(line)) throw new RuntimeException("Line " + lineNumber + " is invalid");
+    static UnaryOperator<Line> validLineCheck = line -> {
+        if (!validLine.test(line)) throw new RuntimeException("Line " + line.lineNumber() + " is invalid");
         return line;
     };
 
-    static BiPredicate<AtomicLong, String> startsWithBOM = (lineNumber, line) -> lineNumber.longValue() == 1 && line.startsWith("\uFEFF");
+    static Predicate<Line> startsWithBOM = line -> line.lineNumber() == 1 && line.content().startsWith("\uFEFF");
 
-    static Function<AtomicLong, Function<String, String>> startsWithBOMCheck = lineNumber -> line -> {
-        if (startsWithBOM.test(lineNumber, line)) throw new RuntimeException("The file starts with a BOM");
+    static UnaryOperator<Line> startsWithBOMCheck = line -> {
+        if (startsWithBOM.test(line)) throw new RuntimeException("The file starts with a BOM");
         return line;
     };
 
-    static Predicate<String> commentLine = line -> line.charAt(0) == '#' && ( line.length() < 4 || !line.startsWith("#EXT") );
+    static Predicate<Line> commentLine = line -> line.content().charAt(0) == '#' && ( line.content().length() < 4 || !line.content().startsWith("#EXT") );
 
     static int hexValue1 = 0x0000;
     static int hexValue2 = 0x001F;
@@ -78,19 +71,19 @@ public class PlaylistReader {
     static int hexValue3 = 0x007F;
     static int hexValue4 = 0x009F;
 
-    public static Predicate<String> containInvalidCharacters = line -> line
+    static Predicate<Line> containInvalidCharacters = line -> line.content()
             .codePoints()
             .filter(codePoint -> ( codePoint <= hexValue2 && codePoint != crValue && codePoint != lfValue ) || ( codePoint >= hexValue3 && codePoint <= hexValue4 ))
             .findAny()
             .isPresent();
 
-    static Function<AtomicLong, Function<String, String>> validCharactersCheck = lineNumber -> line -> {
-        if (containInvalidCharacters.test(line)) throw new RuntimeException("Line " + lineNumber + " contains one or more invalid characters");
+    static UnaryOperator<Line> validCharactersCheck = line -> {
+        if (containInvalidCharacters.test(line)) throw new RuntimeException("Line " + line.lineNumber() + " contains one or more invalid characters");
         return line;
     };
 
-    static Function<AtomicLong, Function<String, String>> normalizationCheck = lineNumber -> line -> {
-        if (!Normalizer.isNormalized(line, Normalizer.Form.NFC)) throw new RuntimeException("Line " + lineNumber + " isn't NFC-normalized");
+    static UnaryOperator<Line> normalizationCheck = line -> {
+        if (!Normalizer.isNormalized(line.content(), Normalizer.Form.NFC)) throw new RuntimeException("Line " + line.lineNumber() + " isn't NFC-normalized");
         return line;
     };
 

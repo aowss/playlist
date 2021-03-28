@@ -6,7 +6,7 @@ import java.util.stream.Stream;
 public class PlaylistParser {
 
     static Playlist parse(Path path) {
-        Stream<String> significantLines = PlaylistReader.streamFile(path);
+        Stream<Line> significantLines = PlaylistReader.streamFile(path);
         //significantLines.reduce()
         return null;
     }

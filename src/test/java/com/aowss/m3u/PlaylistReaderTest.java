@@ -1,3 +1,6 @@
+package com.aowss.m3u;
+
+import com.aowss.m3u.Line;
 import com.aowss.m3u.PlaylistReader;
 
 import org.hamcrest.Matchers;
@@ -52,10 +55,10 @@ public class PlaylistReaderTest {
     public void noUTF8ControlCharacters() throws URISyntaxException {
 
         String invalid = "test\tthat";
-        assertThat(containInvalidCharacters.test(invalid), is(true));
+        assertThat(containInvalidCharacters.test(new Line(1, invalid)), is(true));
 
         String valid = "test\nthat";
-        assertThat(containInvalidCharacters.test(valid), is(false));
+        assertThat(containInvalidCharacters.test(new Line(2, valid)), is(false));
 
         Path path = Paths.get(getClass().getClassLoader().getResource(UTF8WithControlCharacters).toURI());
         Throwable exception = assertThrows(RuntimeException.class, () -> PlaylistReader.streamFile(path).count());
@@ -90,19 +93,19 @@ public class PlaylistReaderTest {
     public void validLine() {
 
         String blank = "";
-        assertThat(validLine.test(blank), is(true));
+        assertThat(validLine.test(new Line(1, blank)), is(true));
 
         String hashLine = "# comment";
-        assertThat(validLine.test(hashLine), is(true));
+        assertThat(validLine.test(new Line(1, hashLine)), is(true));
 
         String tagLine = "#EXT tag";
-        assertThat(validLine.test(tagLine), is(true));
+        assertThat(validLine.test(new Line(1, tagLine)), is(true));
 
         String uriLine = "http://media.example.com/first.ts";
-        assertThat(validLine.test(uriLine), is(true));
+        assertThat(validLine.test(new Line(1, uriLine)), is(true));
 
         String invalidLine = "this is not a uri";
-        assertThat(validLine.test(invalidLine), is(false));
+        assertThat(validLine.test(new Line(1, invalidLine)), is(false));
 
     }
 
