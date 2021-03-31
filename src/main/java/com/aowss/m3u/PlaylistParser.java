@@ -1,14 +1,15 @@
 package com.aowss.m3u;
 
-import java.nio.file.Path;
+import java.util.function.Function;
 import java.util.stream.Stream;
+
+import static com.aowss.m3u.Validator.validate;
 
 public class PlaylistParser {
 
-    static Playlist parse(Path path) {
-        Stream<Line> significantLines = PlaylistReader.streamFile(path);
-        //significantLines.reduce()
-        return null;
-    }
+    public static Function<Stream<String>, Playlist> parse = content -> {
+        Stream<Line> lines = validate.apply(content);
+        return new Playlist(lines.count());
+    };
 
 }

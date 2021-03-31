@@ -1,130 +1,88 @@
 package com.aowss.m3u;
 
-import com.aowss.m3u.Line;
-import com.aowss.m3u.PlaylistReader;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import org.junit.jupiter.api.*;
 
-import org.hamcrest.Matchers;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-
-import java.io.UncheckedIOException;
+import java.io.IOException;
+import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.MalformedInputException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 
-import static com.aowss.m3u.PlaylistReader.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
-@DisplayName("Playlists rules from https://tools.ietf.org/html/rfc8216")
+@DisplayName("Playlists rules from https://tools.ietf.org/html/rfc8216#section-4")
 public class PlaylistReaderTest {
 
-    static String notUTF8Encoded                = "not-utf8.m3u";
-    static String UTF8WithBOM                   = "utf8-with-bom.m3u";
-    static String UTF8WithControlCharacters     = "control-character.m3u";
-    static String UTF8NotNFCNormalized          = "not-nfc-normalized.m3u";
+    private static WireMockServer wireMockServer;
 
-    static String sample                        = "sample.m3u";
-    static String sampleWithBlankLines          = "with-blank-lines.m3u";
-    static String sampleWithCommentLines        = "with-comment-lines.m3u";
+    static String wrongExtension                = "sample.m4u";
 
-    @Test
-    @Tag("UTF-8")
-    @DisplayName("Playlist files MUST be encoded in UTF-8")
-    public void isUTF8Encoded() throws URISyntaxException {
-        Path path = Paths.get(getClass().getClassLoader().getResource(notUTF8Encoded).toURI());
-        Throwable exception = assertThrows(UncheckedIOException.class, () -> PlaylistReader.streamFile(path).count());
-        assertThat(exception.getCause(), Matchers.instanceOf(MalformedInputException.class));
+    @BeforeAll
+    static void setUpWireMock() {
+        wireMockServer = new WireMockServer(8090);
+        wireMockServer.start();
+    }
+
+    @AfterAll
+    static void tearDownWireMock() {
+        wireMockServer.stop();
     }
 
     @Test
-    @Tag("UTF-8")
-    @DisplayName("Playlist files MUST NOT contain any Byte Order Mark (BOM)")
-    public void noBOM() throws URISyntaxException {
-        Path path = Paths.get(getClass().getClassLoader().getResource(UTF8WithBOM).toURI());
-        Throwable exception = assertThrows(RuntimeException.class, () -> PlaylistReader.streamFile(path).count());
-        assertThat(exception.getMessage(), is("The file starts with a BOM"));
+    @Tag("Path")
+    @DisplayName("The path must end with either .m3u8 or .m3u")
+    public void path() throws URISyntaxException {
+        Path path = Paths.get(getClass().getClassLoader().getResource(wrongExtension).toURI());
+        Throwable exception = assertThrows(RuntimeException.class, () -> PlaylistReader.fromFile.apply(path));
+        assertThat(exception.getMessage(), is("The path must end with either .m3u8 or .m3u"));
     }
 
     @Test
-    @Tag("UTF-8")
-    @DisplayName("Playlist files MUST NOT contain UTF-8 control characters (U+0000 to U+001F and U+007F to U+009F), with the exceptions of CR (U+000D) and LF (U+000A)")
-    public void noUTF8ControlCharacters() throws URISyntaxException {
+    @Tag("URL")
+    @DisplayName("The Content-Type must be either 'application/vnd.apple.mpegurl' or 'audio/mpegurl'")
+    public void url() throws URISyntaxException, IOException {
+        wireMockServer.stubFor(
+            get(urlEqualTo("/playlist/wrong"))
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "text/xml")
+                        .withBody(readFileContent("sample.m3u"))
+                )
+        );
 
-        String invalid = "test\tthat";
-        assertThat(containInvalidCharacters.test(new Line(1, invalid)), is(true));
+        wireMockServer.stubFor(
+            get(urlEqualTo("/playlist/right/1"))
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/vnd.apple.mpegurl")
+                        .withBody(readFileContent("sample.m3u"))
+                )
+        );
 
-        String valid = "test\nthat";
-        assertThat(containInvalidCharacters.test(new Line(2, valid)), is(false));
+        wireMockServer.stubFor(
+            get(urlEqualTo("/playlist/right/2"))
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "audio/mpegurl")
+                        .withBody(readFileContent("sample.m3u"))
+                )
+        );
 
-        Path path = Paths.get(getClass().getClassLoader().getResource(UTF8WithControlCharacters).toURI());
-        Throwable exception = assertThrows(RuntimeException.class, () -> PlaylistReader.streamFile(path).count());
-        assertThat(exception.getMessage(), is("Line 8 contains one or more invalid characters"));
+        Throwable exception = assertThrows(RuntimeException.class, () -> PlaylistReader.fromURI.apply(new URI("http://localhost:8090/playlist/wrong")));
+        assertThat(exception.getMessage(), is("The Content-Type must be either 'application/vnd.apple.mpegurl' or 'audio/mpegurl'"));
 
+        assertThat(PlaylistReader.fromURI.apply(new URI("http://localhost:8090/playlist/right/1")).length(), is(10L));
+        assertThat(PlaylistReader.fromURI.apply(new URI("http://localhost:8090/playlist/right/2")).length(), is(10L));
     }
 
-    @Test
-    @Tag("UTF-8")
-    @DisplayName("All character sequences MUST be normalized according to Unicode normalization form \"NFC\"")
-    public void normalizedSequences() throws URISyntaxException {
-
-        Path validPath = Paths.get(getClass().getClassLoader().getResource(sample).toURI());
-        assertThat(PlaylistReader.streamFile(validPath).count(), is(10L));
-
-        Path invalidPath = Paths.get(getClass().getClassLoader().getResource(UTF8NotNFCNormalized).toURI());
-        Throwable exception = assertThrows(RuntimeException.class, () -> PlaylistReader.streamFile(invalidPath).count());
-        assertThat(exception.getMessage(), is("Line 5 isn't NFC-normalized"));
-
+    public static String readFileContent(String path) throws IOException {
+        return new String(Files.readAllBytes(Paths.get("src", "test", "resources", path)), "UTF-8");
     }
-
-    @Test
-    @Tag("Line")
-    @DisplayName("Lines in a Playlist file are terminated by either a single line feed character or a carriage return character followed by a line feed character")
-    public void properLineTermination() {
-        //  There is nothing to do here !
-    }
-
-    @Test
-    @Tag("Line")
-    @DisplayName("Each line is a URI, is blank, or starts with the character '#'")
-    public void validLine() {
-
-        String blank = "";
-        assertThat(validLine.test(new Line(1, blank)), is(true));
-
-        String hashLine = "# comment";
-        assertThat(validLine.test(new Line(1, hashLine)), is(true));
-
-        String tagLine = "#EXT tag";
-        assertThat(validLine.test(new Line(1, tagLine)), is(true));
-
-        String uriLine = "http://media.example.com/first.ts";
-        assertThat(validLine.test(new Line(1, uriLine)), is(true));
-
-        String invalidLine = "this is not a uri";
-        assertThat(validLine.test(new Line(1, invalidLine)), is(false));
-
-    }
-
-    @Test
-    @Tag("Line")
-    @DisplayName("Blank lines are ignored")
-    public void blankLines() throws URISyntaxException {
-        Path path = Paths.get(getClass().getClassLoader().getResource(sampleWithBlankLines).toURI());
-        assertThat(PlaylistReader.streamFile(path).count(), is(10L));
-    }
-
-    @Test
-    @Tag("Line")
-    @DisplayName("All other lines that begin with '#' are comments and SHOULD be ignored")
-    public void commentLines() throws URISyntaxException {
-        Path path = Paths.get(getClass().getClassLoader().getResource(sampleWithCommentLines).toURI());
-        assertThat(PlaylistReader.streamFile(path).count(), is(10L));
-    }
-
-    //  Whitespace MUST NOT be present, except for elements in which it is explicitly specified
 
 }

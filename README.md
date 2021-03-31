@@ -1,4 +1,4 @@
-This is an implementation of the [HTTP Live Streaming's Playlist](https://tools.ietf.org/html/rfc8216#section-4).
+This is a utility to manipulate [HTTP Live Streaming's Playlists](https://tools.ietf.org/html/rfc8216#section-4).
 
 ## Testing
 
