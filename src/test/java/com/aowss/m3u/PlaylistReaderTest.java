@@ -33,7 +33,7 @@ public class PlaylistReaderTest {
 
     @Test
     @Tag("Path")
-    @DisplayName("The path must end with either .m3u8 or .m3u")
+    @DisplayName("The file path must end with either .m3u8 or .m3u")
     public void path() throws URISyntaxException {
         Path path = Paths.get(getClass().getClassLoader().getResource(wrongExtension).toURI());
         Throwable exception = assertThrows(RuntimeException.class, () -> PlaylistReader.fromFile.apply(path));
@@ -42,8 +42,36 @@ public class PlaylistReaderTest {
 
     @Test
     @Tag("URL")
-    @DisplayName("The Content-Type must be either 'application/vnd.apple.mpegurl' or 'audio/mpegurl'")
+    @DisplayName("If the URI ends with either .m3u8 or .m3u, the Content-Type is irrelvant")
     public void url() throws URISyntaxException, IOException {
+        wireMockServer.stubFor(
+            get(urlEqualTo("/playlist/sample.m3u"))
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "text/xml")
+                        .withBody(readFileContent("sample.m3u"))
+                )
+        );
+
+        wireMockServer.stubFor(
+            get(urlEqualTo("/playlist/sample.m3u8"))
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/vnd.apple.mpegurl")
+                        .withBody(readFileContent("sample.m3u"))
+                )
+        );
+
+        assertThat(PlaylistReader.fromURI.apply(new URI("http://localhost:8090/playlist/sample.m3u")).length(), is(10L));
+        assertThat(PlaylistReader.fromURI.apply(new URI("http://localhost:8090/playlist/sample.m3u8")).length(), is(10L));
+    }
+
+    @Test
+    @Tag("URL")
+    @DisplayName("If the URI path doesn't end with either .m3u8 or .m3u, the Content-Type must be either 'application/vnd.apple.mpegurl' or 'audio/mpegurl'")
+    public void contentType() throws URISyntaxException, IOException {
         wireMockServer.stubFor(
             get(urlEqualTo("/playlist/wrong"))
                 .willReturn(
@@ -75,7 +103,7 @@ public class PlaylistReaderTest {
         );
 
         Throwable exception = assertThrows(RuntimeException.class, () -> PlaylistReader.fromURI.apply(new URI("http://localhost:8090/playlist/wrong")));
-        assertThat(exception.getMessage(), is("The Content-Type must be either 'application/vnd.apple.mpegurl' or 'audio/mpegurl'"));
+        assertThat(exception.getMessage(), is("The URI must end with either .m3u8 or .m3u or the Content-Type must be either 'application/vnd.apple.mpegurl' or 'audio/mpegurl'"));
 
         assertThat(PlaylistReader.fromURI.apply(new URI("http://localhost:8090/playlist/right/1")).length(), is(10L));
         assertThat(PlaylistReader.fromURI.apply(new URI("http://localhost:8090/playlist/right/2")).length(), is(10L));

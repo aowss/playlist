@@ -36,7 +36,7 @@ public class PlaylistReader {
         try {
             HttpResponse<Stream<String>> response = httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
             Predicate<String> isM3U = value -> value.equals("application/vnd.apple.mpegurl") || value.equals("audio/mpegurl");
-            if (!response.headers().allValues("Content-Type").stream().anyMatch(isM3U)) throw new RuntimeException("The Content-Type must be either 'application/vnd.apple.mpegurl' or 'audio/mpegurl'");
+            if ( !uri.getPath().endsWith(".m3u8") && !uri.getPath().endsWith(".m3u") && !response.headers().allValues("Content-Type").stream().anyMatch(isM3U) ) throw new RuntimeException("The URI must end with either .m3u8 or .m3u or the Content-Type must be either 'application/vnd.apple.mpegurl' or 'audio/mpegurl'");
             return parse.apply(response.body());
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException("Error while downloading the file from " + uri, e);
