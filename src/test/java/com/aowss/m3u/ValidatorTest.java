@@ -24,6 +24,7 @@ public class ValidatorTest {
     static String UTF8WithBOM                   = "utf8-with-bom.m3u";
     static String UTF8WithControlCharacters     = "control-character.m3u";
     static String UTF8NotNFCNormalized          = "not-nfc-normalized.m3u";
+    static String noExtm3u                      = "no-extm3u.m3u";
 
     static String sample                        = "sample.m3u";
     static String sampleWithBlankLines          = "with-blank-lines.m3u";
@@ -124,5 +125,14 @@ public class ValidatorTest {
     }
 
     //  Whitespace MUST NOT be present, except for elements in which it is explicitly specified
+
+    @Test
+    @Tag("Tags")
+    @DisplayName("Playlist files MUST start with #EXTM3U")
+    public void noExtm3u() throws URISyntaxException {
+        Path path = Paths.get(getClass().getClassLoader().getResource(noExtm3u).toURI());
+        Throwable exception = assertThrows(RuntimeException.class, () -> PlaylistReader.fromFile.apply(path));
+        assertThat(exception.getMessage(), is("The file must start with the EXTM3U tag"));
+    }
 
 }

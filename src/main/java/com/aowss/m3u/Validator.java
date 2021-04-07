@@ -32,9 +32,16 @@ public class Validator {
         return line;
     };
 
+    static Predicate<Line> startsWithEXTM3U = line -> line.lineNumber() != 1 ||line.content().equals("#EXTM3U");
+
+    static UnaryOperator<Line> startsEXTM3UCheck = line -> {
+        if (!startsWithEXTM3U.test(line)) throw new RuntimeException("The file must start with the EXTM3U tag");
+        return line;
+    };
+
     static Predicate<Line> startsWithBOM = line -> line.lineNumber() == 1 && line.content().startsWith("\uFEFF");
 
-    static UnaryOperator<Line> startsWithBOMCheck = line -> {
+    static UnaryOperator<Line> notStartWithBOMCheck = line -> {
         if (startsWithBOM.test(line)) throw new RuntimeException("The file starts with a BOM");
         return line;
     };
@@ -68,7 +75,8 @@ public class Validator {
         var lineNumber = new AtomicLong(1);
         return lines
                 .map(addLineNumber.apply(lineNumber))
-                .map(startsWithBOMCheck)
+                .map(notStartWithBOMCheck)
+                .map(startsEXTM3UCheck)
                 .map(validLineCheck)
                 .filter(not(emptyLine))
                 .filter(not(commentLine))
